@@ -161,3 +161,25 @@ func TestStrayArgument(t *testing.T) {
 		t.Fatalf("got %d %q", code, errOut)
 	}
 }
+
+func TestHookSessionStart(t *testing.T) {
+	code, out, _ := cli(t, "hook", "session-start")
+	if code != 0 || !strings.Contains(out, "decision-log add --decision") {
+		t.Fatalf("got %d %q", code, out)
+	}
+}
+
+func TestHookIsSilentWhenDisabled(t *testing.T) {
+	t.Setenv(DisableEnv, "1")
+	if code, out, _ := cli(t, "hook", "session-start"); code != 0 || out != "" {
+		t.Fatalf("got %d %q", code, out)
+	}
+}
+
+func TestHookNeverFails(t *testing.T) {
+	for _, args := range [][]string{{"hook"}, {"hook", "unknown-event"}, {"hook", "a", "b"}} {
+		if code, out, _ := cli(t, args...); code != 0 || out != "" {
+			t.Errorf("%v: got %d %q", args, code, out)
+		}
+	}
+}
