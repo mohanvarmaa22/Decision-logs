@@ -84,7 +84,7 @@ func TestAddThenList(t *testing.T) {
 	if got := strings.Join(n.Files, ","); got != "src/cache.ts,src/session.ts" {
 		t.Errorf("files not repo-relative: %s", got)
 	}
-	if n.Branch != "main" || len(n.Repo.RootCommit) != 40 || n.Status != note.StatusActive || n.Commit != "" {
+	if n.Branch != "main" || n.BaseCommit != n.Repo.RootCommit || len(n.Repo.RootCommit) != 40 || n.Status != note.StatusActive || n.Commit != "" {
 		t.Errorf("bad metadata: %+v", n)
 	}
 

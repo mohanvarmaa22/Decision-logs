@@ -19,10 +19,12 @@ const (
 	MaxPerCommit = 3
 )
 
-// Select returns the notes to link to commit: pending, same repo and branch,
-// inside the window and sharing a changed file, newest first. Notes with no
-// files never match; they stay standalone.
-func Select(notes []*note.Note, repo note.Repo, branch, commit string, changed []string, now time.Time) []*note.Note {
+// Select returns the notes to link to commit: pending, same repo, inside the
+// window, sharing a changed file, and on the same line of work, newest first.
+// Same line of work means the same branch, or a commit that descends from the
+// note's BaseCommit, which covers a branch created after the note. Notes with
+// no files never match; they stay standalone.
+func Select(notes []*note.Note, repo note.Repo, branch, commit string, changed []string, descends func(base string) bool, now time.Time) []*note.Note {
 	room := MaxPerCommit
 	var out []*note.Note
 	for _, n := range notes {
@@ -35,9 +37,10 @@ func Select(notes []*note.Note, repo note.Repo, branch, commit string, changed [
 			break
 		}
 		age := now.Sub(n.CreatedAt)
-		if n.Commit == "" && n.Status == note.StatusActive && n.Branch == branch &&
+		// descends runs git, so it goes last.
+		if n.Commit == "" && n.Status == note.StatusActive &&
 			n.InRepo(repo.RootCommit, repo.Path) && age >= 0 && age <= Window &&
-			sharesFile(n.Files, changed) {
+			sharesFile(n.Files, changed) && (n.Branch == branch || descends(n.BaseCommit)) {
 			out = append(out, n)
 		}
 	}
@@ -61,7 +64,8 @@ func Head(s *store.Store, r *gitx.Repo, now time.Time) error {
 	// A corrupt note elsewhere shouldn't stop linking, so All's error is ignored.
 	notes, _ := s.All()
 	root := r.RootCommit()
-	selected := Select(notes, note.Repo{RootCommit: root, Path: r.Root}, r.Branch(), commit, changed, now)
+	descends := func(base string) bool { return base != "" && r.IsAncestor(base, commit) }
+	selected := Select(notes, note.Repo{RootCommit: root, Path: r.Root}, r.Branch(), commit, changed, descends, now)
 	if len(selected) == 0 {
 		return nil
 	}

@@ -58,6 +58,7 @@ func cmdAdd(args []string, stdout, stderr io.Writer) int {
 	if repo, err := gitx.Find(cwd); err == nil {
 		n.Repo = note.Repo{RootCommit: repo.RootCommit(), Remote: repo.Remote(), Path: repo.Root}
 		n.Branch = repo.Branch()
+		n.BaseCommit, _ = repo.Head() // a repo with no commits has none
 		rel := make([]string, len(n.Files))
 		for i, f := range n.Files {
 			rel[i] = repo.RelPath(cwd, f)

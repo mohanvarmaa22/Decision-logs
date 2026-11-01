@@ -49,6 +49,9 @@ type Note struct {
 
 	Repo   Repo   `json:"repo"`
 	Branch string `json:"branch,omitempty"`
+	// BaseCommit is HEAD when the note was saved, so a commit on a branch created
+	// afterwards can still be recognised as the same line of work.
+	BaseCommit string `json:"base_commit,omitempty"`
 
 	Status       string `json:"status"`
 	SupersededBy string `json:"superseded_by,omitempty"`
