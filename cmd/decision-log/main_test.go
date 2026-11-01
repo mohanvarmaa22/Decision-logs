@@ -163,16 +163,33 @@ func TestStrayArgument(t *testing.T) {
 }
 
 func TestHookSessionStart(t *testing.T) {
-	code, out, _ := cli(t, "hook", "session-start")
-	if code != 0 || !strings.Contains(out, "decision-log add --decision") {
+	repo := setup(t) // outside a temp repo this would install into the real one
+	code, out, errOut := cli(t, "hook", "session-start")
+	if code != 0 || !strings.Contains(out, "decision-log add --decision") || errOut != "" {
+		t.Fatalf("got %d %q %q", code, out, errOut)
+	}
+	hook, err := os.ReadFile(filepath.Join(repo, ".git", "hooks", "post-commit"))
+	if err != nil || !strings.Contains(string(hook), "hook post-commit") {
+		t.Fatalf("git hook not installed: %v\n%s", err, hook)
+	}
+}
+
+func TestHookSessionStartOutsideRepo(t *testing.T) {
+	t.Setenv(store.HomeEnv, t.TempDir())
+	t.Chdir(t.TempDir())
+	if code, out, _ := cli(t, "hook", "session-start"); code != 0 || !strings.Contains(out, "decision-log add") {
 		t.Fatalf("got %d %q", code, out)
 	}
 }
 
 func TestHookIsSilentWhenDisabled(t *testing.T) {
+	repo := setup(t)
 	t.Setenv(DisableEnv, "1")
 	if code, out, _ := cli(t, "hook", "session-start"); code != 0 || out != "" {
 		t.Fatalf("got %d %q", code, out)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".git", "hooks", "post-commit")); err == nil {
+		t.Fatal("hook installed while disabled")
 	}
 }
 

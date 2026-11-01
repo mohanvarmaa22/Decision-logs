@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "decision-log hook session-start 2>/dev/null || true",
-            "timeout": 1
+            "timeout": 2
           }
         ]
       }
