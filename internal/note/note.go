@@ -55,6 +55,8 @@ type Note struct {
 
 	// Commit is empty while the note is pending, i.e. not yet linked.
 	Commit string `json:"commit,omitempty"`
+	// PatchID fingerprints the commit's change and survives rebase and cherry-pick.
+	PatchID string `json:"patch_id,omitempty"`
 }
 
 // New returns a note with an ID and timestamps set and its fields cleaned up.
@@ -109,6 +111,15 @@ func (n *Note) Merge(dup *Note, now time.Time) {
 	n.DecidedBy = dup.DecidedBy
 	n.Files = CleanFiles(append(n.Files, dup.Files...))
 	n.UpdatedAt = now.UTC()
+}
+
+// InRepo reports whether n belongs to the repo. A note made before the repo's
+// first commit has no root commit, so it matches on path.
+func (n *Note) InRepo(rootCommit, path string) bool {
+	if n.Repo.RootCommit == "" {
+		return n.Repo.Path != "" && n.Repo.Path == path
+	}
+	return n.Repo.RootCommit == rootCommit
 }
 
 func (n *Note) repoKey() string {

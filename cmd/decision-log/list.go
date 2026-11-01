@@ -82,7 +82,7 @@ func inRepo(notes []*note.Note, repo *gitx.Repo) []*note.Note {
 	root := repo.RootCommit()
 	var out []*note.Note
 	for _, n := range notes {
-		if (root != "" && n.Repo.RootCommit == root) || (n.Repo.RootCommit == "" && n.Repo.Path == repo.Root) {
+		if n.InRepo(root, repo.Root) {
 			out = append(out, n)
 		}
 	}

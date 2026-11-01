@@ -53,6 +53,44 @@ func (r *Repo) Branch() string {
 	return out
 }
 
+// Head is the current commit's full hash.
+func (r *Repo) Head() (string, error) {
+	return run(r.Root, "rev-parse", "HEAD")
+}
+
+// ChangedFiles lists the repo-relative files a commit changed. Renames appear
+// under both names. A merge commit lists none.
+func (r *Repo) ChangedFiles(commit string) ([]string, error) {
+	out, err := run(r.Root, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "--root", commit)
+	if err != nil {
+		return nil, err
+	}
+	return strings.FieldsFunc(out, func(c rune) bool { return c == 0 }), nil
+}
+
+// PatchID is the stable fingerprint of a commit's change, or "" if it has none.
+func (r *Repo) PatchID(commit string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+	diff := exec.CommandContext(ctx, "git", "-C", r.Root, "diff-tree", "-p", "--root", commit)
+	patch := exec.CommandContext(ctx, "git", "-C", r.Root, "patch-id", "--stable")
+	var err error
+	if patch.Stdin, err = diff.StdoutPipe(); err != nil {
+		return ""
+	}
+	var stdout bytes.Buffer
+	patch.Stdout = &stdout
+	if err := diff.Start(); err != nil {
+		return ""
+	}
+	patchErr := patch.Run()
+	if diff.Wait() != nil || patchErr != nil {
+		return ""
+	}
+	id, _, _ := strings.Cut(stdout.String(), " ")
+	return strings.TrimSpace(id)
+}
+
 // RelPath turns a path given relative to cwd (or absolute) into a
 // slash-separated path relative to the repo root. Paths outside the repo come
 // back cleaned but otherwise unchanged.

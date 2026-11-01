@@ -4,7 +4,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
+
+	"github.com/decision-log/decision-log/internal/gitx"
+	"github.com/decision-log/decision-log/internal/link"
+	"github.com/decision-log/decision-log/internal/store"
 )
+
+// hookBudget bounds a git hook so it can never slow a commit noticeably. Note
+// writes are atomic, so giving up midway can't corrupt anything.
+const hookBudget = time.Second
 
 // DisableEnv turns all hooks off, for scripts and for backfill's own claude -p calls.
 const DisableEnv = "DECISION_LOG_DISABLE"
@@ -21,8 +30,41 @@ func cmdHook(args []string, stdout io.Writer) int {
 	if os.Getenv(DisableEnv) != "" || len(args) != 1 {
 		return 0
 	}
-	if args[0] == "session-start" {
+	switch args[0] {
+	case "session-start":
 		fmt.Fprintln(stdout, sessionStartNote)
+	case "post-commit":
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			defer func() { _ = recover() }()
+			linkHead()
+		}()
+		select {
+		case <-done:
+		case <-time.After(hookBudget):
+		}
 	}
 	return 0
+}
+
+// linkHead ignores every error: a failed link leaves the note pending.
+func linkHead() {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	repo, err := gitx.Find(cwd)
+	if err != nil {
+		return
+	}
+	home, err := store.DefaultHome()
+	if err != nil {
+		return
+	}
+	s, err := store.Open(home)
+	if err != nil {
+		return
+	}
+	_ = link.Head(s, repo, now())
 }

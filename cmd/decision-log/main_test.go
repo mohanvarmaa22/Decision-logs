@@ -183,3 +183,32 @@ func TestHookNeverFails(t *testing.T) {
 		}
 	}
 }
+
+func TestPostCommitLinksNote(t *testing.T) {
+	repo := setup(t)
+	cli(t, addArgs...)
+	if err := os.WriteFile(filepath.Join(repo, "src", "cache.ts"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "."}, {"commit", "-q", "-m", "cache"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	code, out, errOut := cli(t, "hook", "post-commit")
+	if code != 0 || out != "" || errOut != "" {
+		t.Fatalf("hook not silent: %d %q %q", code, out, errOut)
+	}
+	if n := listJSON(t); n[0].Commit == "" || n[0].PatchID == "" {
+		t.Fatalf("not linked: %+v", n[0])
+	}
+}
+
+func TestPostCommitFailsOpenOutsideRepo(t *testing.T) {
+	t.Setenv(store.HomeEnv, t.TempDir())
+	t.Chdir(t.TempDir())
+	if code, out, errOut := cli(t, "hook", "post-commit"); code != 0 || out != "" || errOut != "" {
+		t.Fatalf("got %d %q %q", code, out, errOut)
+	}
+}

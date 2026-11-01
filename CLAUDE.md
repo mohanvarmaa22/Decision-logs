@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Prototype. The source of truth is `Decision Log — PRD.md`. Read it before designing anything; its "Decisions made" table is settled, so do not re-open those choices. Built so far: `add`, `list`, `version`, the store, the secret scanner, the plugin skill and the SessionStart instruction. Not yet built: `link`, `why`, the Stop hook, git hooks, `init`/`doctor`/`uninstall`, backfill and the UI.
+Prototype. The source of truth is `Decision Log — PRD.md`. Read it before designing anything; its "Decisions made" table is settled, so do not re-open those choices. Built so far: `add`, `list`, `version`, the store, the secret scanner, the plugin skill, the SessionStart instruction and linking (`hook post-commit`; nothing installs the git hook yet). Not yet built: `why`, the Stop hook, git hooks, `init`/`doctor`/`uninstall`, backfill and the UI.
 
 ## Commands
 
