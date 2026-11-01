@@ -1,6 +1,6 @@
 {
   "name": "decision-log",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Captures the decisions made while coding, so you never lose the \"why\" behind your code.",
   "author": {
     "name": "Mohan Varma"

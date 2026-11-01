@@ -38,6 +38,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdAdd(args[1:], stdout, stderr)
 	case "list":
 		return cmdList(args[1:], stdout, stderr)
+	case "hook":
+		return cmdHook(args[1:], stdout)
 	case "version", "--version", "-v":
 		fmt.Fprintf(stdout, "decision-log %s (MIT license, provided as-is)\n", version)
 		return 0
