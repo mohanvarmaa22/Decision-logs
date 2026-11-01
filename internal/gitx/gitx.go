@@ -5,14 +5,22 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
 
 // Timeout bounds every git call so a slow repo can never stall the caller.
 const Timeout = 2 * time.Second
+
+// lookupTimeout is for calls a person is waiting on. Blame and line history can
+// take longer on big files, and no commit is being held up.
+const lookupTimeout = 15 * time.Second
 
 // ErrNotRepo means the directory is not inside a git work tree.
 var ErrNotRepo = errors.New("not a git repository")
@@ -97,6 +105,64 @@ func (r *Repo) PatchID(commit string) string {
 	return strings.TrimSpace(id)
 }
 
+// Blame returns the distinct commits that last touched lines first to last.
+// Uncommitted lines are left out. It respects .git-blame-ignore-revs.
+func (r *Repo) Blame(file string, first, last int) ([]string, error) {
+	args := []string{"blame", "--porcelain", "-L", fmt.Sprintf("%d,%d", first, last)}
+	if _, err := os.Stat(filepath.Join(r.Root, ".git-blame-ignore-revs")); err == nil {
+		args = append(args, "--ignore-revs-file", ".git-blame-ignore-revs")
+	}
+	out, err := runWithin(lookupTimeout, r.Root, append(args, "--", file)...)
+	if err != nil {
+		return nil, err
+	}
+	var commits []string
+	for _, line := range strings.Split(out, "\n") {
+		hash, _, ok := strings.Cut(line, " ")
+		if ok && isCommitHash(hash) && strings.Trim(hash, "0") != "" && !slices.Contains(commits, hash) {
+			commits = append(commits, hash)
+		}
+	}
+	return commits, nil
+}
+
+func isCommitHash(s string) bool {
+	return len(s) >= 40 && strings.Trim(s, "0123456789abcdef") == ""
+}
+
+// LineHistory returns up to limit commits that changed lines first to last,
+// newest first. Any failure just means an empty history.
+func (r *Repo) LineHistory(file string, first, last, limit int) []string {
+	out, err := runWithin(lookupTimeout, r.Root, "log", "-s", "--format=%H", "-n", strconv.Itoa(limit),
+		"-L", fmt.Sprintf("%d,%d:%s", first, last, file))
+	if err != nil {
+		return nil
+	}
+	return strings.Fields(out)
+}
+
+// FileNames lists the names a file has had, following renames.
+func (r *Repo) FileNames(file string) []string {
+	out, err := runWithin(lookupTimeout, r.Root, "log", "--follow", "--format=", "--name-only", "-z", "--", file)
+	if err != nil {
+		return nil
+	}
+	return strings.FieldsFunc(out, func(c rune) bool { return c == 0 || c == '\n' })
+}
+
+// CommitTime is when a commit was made.
+func (r *Repo) CommitTime(commit string) (time.Time, error) {
+	out, err := run(r.Root, "log", "-1", "--format=%ct", commit)
+	if err != nil {
+		return time.Time{}, err
+	}
+	sec, err := strconv.ParseInt(out, 10, 64)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Unix(sec, 0), nil
+}
+
 // RelPath turns a path given relative to cwd (or absolute) into a
 // slash-separated path relative to the repo root. Paths outside the repo come
 // back cleaned but otherwise unchanged.
@@ -132,7 +198,11 @@ func resolve(p string) string {
 }
 
 func run(dir string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	return runWithin(Timeout, dir, args...)
+}
+
+func runWithin(limit time.Duration, dir string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	var stdout bytes.Buffer
