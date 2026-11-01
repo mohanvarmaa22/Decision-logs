@@ -87,6 +87,24 @@ func TestRelPath(t *testing.T) {
 	}
 }
 
+func TestIsAncestor(t *testing.T) {
+	dir := gitInit(t)
+	git(t, dir, "commit", "-q", "--allow-empty", "-m", "first")
+	r, _ := Find(dir)
+	first, _ := r.Head()
+	git(t, dir, "commit", "-q", "--allow-empty", "-m", "second")
+	second, _ := r.Head()
+	if !r.IsAncestor(first, second) || !r.IsAncestor(first, first) {
+		t.Error("first should be an ancestor")
+	}
+	if r.IsAncestor(second, first) {
+		t.Error("second is not an ancestor of first")
+	}
+	if r.IsAncestor("0000000000000000000000000000000000000000", first) {
+		t.Error("unknown commit is not an ancestor")
+	}
+}
+
 func TestChangedFilesAndPatchID(t *testing.T) {
 	dir := gitInit(t)
 	write := func(name, body string) {

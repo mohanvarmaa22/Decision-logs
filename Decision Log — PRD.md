@@ -287,7 +287,7 @@ The biggest risk is note quality, not the tech. If notes aren't worth reading, n
 | --- | --- | --- | --- |
 | Quality | Noise | Too many trivial notes; users stop reading | Strict "what counts" rules, Decided-by filter, 3-per-commit cap, track delete rate |
 | Quality | Missed decisions | Decisions without trigger words, or made outside Claude | `/decide`; honest "captures most, not all" messaging |
-| Quality | Wrong attachment | Note linked to an unrelated commit | Match on files + branch + time window; unmatched notes wait in Pending |
+| Quality | Wrong attachment | Note linked to an unrelated commit | Match on files + line of work (same branch, or a commit built on the one the note was saved at) + time window; unmatched notes wait in Pending |
 | Quality | Vague reasons | "Because it's better" | Skill requires a concrete reason; UI flags vague notes |
 | Flow | Annoying nudges | Backstop adds visible extra turns | Tune the proactive skill; measure nudge rate |
 | Flow | Hook crash or slowness | Commits feel slow or fail | Always exit 0, \~1 s timeout, no network in hooks |

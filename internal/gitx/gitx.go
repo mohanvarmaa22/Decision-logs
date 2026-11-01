@@ -58,6 +58,12 @@ func (r *Repo) Head() (string, error) {
 	return run(r.Root, "rev-parse", "HEAD")
 }
 
+// IsAncestor reports whether commit descends from (or is) base.
+func (r *Repo) IsAncestor(base, commit string) bool {
+	_, err := run(r.Root, "merge-base", "--is-ancestor", base, commit)
+	return err == nil
+}
+
 // ChangedFiles lists the repo-relative files a commit changed. Renames appear
 // under both names. A merge commit lists none.
 func (r *Repo) ChangedFiles(commit string) ([]string, error) {
