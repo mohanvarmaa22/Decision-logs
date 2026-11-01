@@ -163,6 +163,40 @@ func (r *Repo) CommitTime(commit string) (time.Time, error) {
 	return time.Unix(sec, 0), nil
 }
 
+// HooksDir is the absolute directory git runs this repo's hooks from. It honours
+// core.hooksPath, and worktrees share their main checkout's directory.
+func (r *Repo) HooksDir() (string, error) {
+	out, err := run(r.Root, "rev-parse", "--git-path", "hooks")
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(out) {
+		out = filepath.Join(r.Root, out)
+	}
+	return resolve(out), nil
+}
+
+// InGitDir reports whether path is inside the repo's git directory, where a
+// file can't be committed or show up in git status.
+func (r *Repo) InGitDir(path string) bool {
+	out, err := run(r.Root, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(out) {
+		out = filepath.Join(r.Root, out)
+	}
+	rel, err := filepath.Rel(resolve(out), resolve(path))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// IsIgnored reports whether a path inside the work tree is ignored by git. A
+// tracked file, or a path outside the work tree, is not.
+func (r *Repo) IsIgnored(path string) bool {
+	_, err := run(r.Root, "check-ignore", "-q", "--", path)
+	return err == nil
+}
+
 // RelPath turns a path given relative to cwd (or absolute) into a
 // slash-separated path relative to the repo root. Paths outside the repo come
 // back cleaned but otherwise unchanged.

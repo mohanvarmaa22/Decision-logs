@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/decision-log/decision-log/internal/githook"
 	"github.com/decision-log/decision-log/internal/gitx"
 	"github.com/decision-log/decision-log/internal/link"
 	"github.com/decision-log/decision-log/internal/store"
@@ -33,33 +34,48 @@ func cmdHook(args []string, stdout io.Writer) int {
 	switch args[0] {
 	case "session-start":
 		fmt.Fprintln(stdout, sessionStartNote)
+		withinBudget(installGitHook)
 	case "post-commit":
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			defer func() { _ = recover() }()
-			linkHead()
-		}()
-		select {
-		case <-done:
-		case <-time.After(hookBudget):
-		}
+		withinBudget(linkHead)
 	}
 	return 0
 }
 
-// linkHead ignores every error: a failed link leaves the note pending.
-func linkHead() {
+// withinBudget runs fn but never waits past hookBudget or lets a panic escape.
+func withinBudget(fn func()) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() { _ = recover() }()
+		fn()
+	}()
+	select {
+	case <-done:
+	case <-time.After(hookBudget):
+	}
+}
+
+// hookContext finds the repo and data directory. It's false outside a repo.
+func hookContext() (*gitx.Repo, string, bool) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return
+		return nil, "", false
 	}
 	repo, err := gitx.Find(cwd)
 	if err != nil {
-		return
+		return nil, "", false
 	}
 	home, err := store.DefaultHome()
 	if err != nil {
+		return nil, "", false
+	}
+	return repo, home, true
+}
+
+// linkHead ignores every error: a failed link leaves the note pending.
+func linkHead() {
+	repo, home, ok := hookContext()
+	if !ok {
 		return
 	}
 	s, err := store.Open(home)
@@ -67,4 +83,20 @@ func linkHead() {
 		return
 	}
 	_ = link.Head(s, repo, now())
+}
+
+// installGitHook ignores every error: without the hook, notes just stay pending.
+func installGitHook() {
+	repo, home, ok := hookContext()
+	if !ok {
+		return
+	}
+	bin, err := os.Executable()
+	if err != nil {
+		return
+	}
+	if _, err := store.Open(home); err != nil { // creates home with private permissions
+		return
+	}
+	_, _ = githook.Install(repo, bin, home)
 }
