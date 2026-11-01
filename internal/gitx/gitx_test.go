@@ -86,3 +86,45 @@ func TestRelPath(t *testing.T) {
 		t.Errorf("outside path changed: %q", got)
 	}
 }
+
+func TestChangedFilesAndPatchID(t *testing.T) {
+	dir := gitInit(t)
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a b.txt", "one\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-q", "-m", "root commit")
+	r, _ := Find(dir)
+
+	root, err := r.Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := r.ChangedFiles(root)
+	if err != nil || len(files) != 1 || files[0] != "a b.txt" {
+		t.Fatalf("root commit files = %q, err %v", files, err)
+	}
+
+	// The same change on two branches has one patch ID but two commit hashes.
+	git(t, dir, "switch", "-q", "-c", "other")
+	write("b.txt", "two\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-q", "-m", "change")
+	picked, _ := r.Head()
+	git(t, dir, "switch", "-q", "main")
+	write("c.txt", "three\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-q", "-m", "move main")
+	git(t, dir, "cherry-pick", picked)
+	copied, _ := r.Head()
+	if copied == picked {
+		t.Fatal("cherry-pick kept the hash")
+	}
+	if a, b := r.PatchID(picked), r.PatchID(copied); a == "" || a != b {
+		t.Fatalf("patch IDs differ: %q %q", a, b)
+	}
+}
