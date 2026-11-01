@@ -17,7 +17,8 @@ var now = time.Now
 const usage = `decision-log: never lose the "why" behind your code.
 
 Usage:
-  decision-log add --decision "..." --why "..." --rejected "..." --by user|claude [--files a,b]
+  decision-log add --decision "..." --why "..." --rejected "..." --by user|claude [--files a,b] [--supersedes id]
+  decision-log why <file>[:line[-line]] | <keyword>...
   decision-log list [--here] [--limit N] [--json]
   decision-log version
 
@@ -38,6 +39,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdAdd(args[1:], stdout, stderr)
 	case "list":
 		return cmdList(args[1:], stdout, stderr)
+	case "why":
+		return cmdWhy(args[1:], stdout, stderr)
 	case "hook":
 		return cmdHook(args[1:], stdout)
 	case "version", "--version", "-v":

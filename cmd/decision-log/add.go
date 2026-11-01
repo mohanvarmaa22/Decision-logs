@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/decision-log/decision-log/internal/gitx"
@@ -36,6 +37,7 @@ func cmdAdd(args []string, stdout, stderr io.Writer) int {
 	rejected := fs.String("rejected", "", "the alternative(s) not chosen, and why (one line)")
 	by := fs.String("by", "", `who made the call: "user" or "claude"`)
 	var files fileList
+	supersedes := fs.String("supersedes", "", "ID of an earlier note this decision replaces")
 	fs.Var(&files, "files", "files the decision is about, relative to the current directory (repeatable or comma-separated)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -100,9 +102,26 @@ func cmdAdd(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	var replaced *note.Note
+	if *supersedes != "" {
+		i := slices.IndexFunc(existing, func(o *note.Note) bool { return o.ID == *supersedes })
+		if i < 0 || *supersedes == n.ID {
+			fmt.Fprintf(stderr, "decision-log add: note not saved: no earlier note with id %q\n", *supersedes)
+			return 2
+		}
+		replaced = existing[i]
+	}
+
 	if err := s.Save(n); err != nil {
 		fmt.Fprintf(stderr, "decision-log add: %v\n", err)
 		return 1
+	}
+	if replaced != nil {
+		replaced.Status, replaced.SupersededBy, replaced.UpdatedAt = note.StatusSuperseded, n.ID, t.UTC()
+		if err := s.Save(replaced); err != nil {
+			fmt.Fprintf(stderr, "decision-log add: saved %s, but couldn't mark the old note superseded: %v\n", n.ID, err)
+			return 1
+		}
 	}
 
 	msg := fmt.Sprintf("decision-log: %s %s", verb, n.ID)

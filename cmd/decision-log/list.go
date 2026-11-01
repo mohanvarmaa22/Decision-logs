@@ -95,6 +95,10 @@ func printNote(w io.Writer, n *note.Note) {
 		status = "  [superseded]"
 	}
 	fmt.Fprintf(w, "%s  %-6s  %s%s\n", n.CreatedAt.Local().Format("2006-01-02 15:04"), n.DecidedBy, n.Decision, status)
+	fmt.Fprintf(w, "  ID:        %s\n", n.ID)
+	if n.SupersededBy != "" {
+		fmt.Fprintf(w, "  Replaced:  by %s\n", n.SupersededBy)
+	}
 	fmt.Fprintf(w, "  Why:       %s\n", n.Why)
 	fmt.Fprintf(w, "  Rejected:  %s\n", n.Rejected)
 	if len(n.Files) > 0 {

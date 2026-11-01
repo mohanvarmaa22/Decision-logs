@@ -212,3 +212,92 @@ func TestPostCommitFailsOpenOutsideRepo(t *testing.T) {
 		t.Fatalf("got %d %q %q", code, out, errOut)
 	}
 }
+
+func gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func TestWhyFindsLineFileAndKeyword(t *testing.T) {
+	repo := setup(t)
+	cli(t, addArgs...)
+	if err := os.WriteFile(filepath.Join(repo, "src", "cache.ts"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "add", ".")
+	gitIn(t, repo, "commit", "-q", "-m", "cache")
+	cli(t, "hook", "post-commit")
+
+	for _, q := range []string{"cache.ts:2", "cache.ts:1-2", "cache.ts", "redis"} {
+		code, out, errOut := cli(t, "why", q)
+		if code != 0 || !strings.Contains(out, "Use Redis for session cache") || !strings.HasPrefix(out, dataNotice) {
+			t.Errorf("why %s: %d %q %q", q, code, out, errOut)
+		}
+	}
+	if _, out, _ := cli(t, "why", "cache.ts:2"); !strings.Contains(out, "Match:     commit ") {
+		t.Errorf("line lookup should say how it matched: %s", out)
+	}
+}
+
+func TestWhyWithNoResults(t *testing.T) {
+	repo := setup(t)
+	if err := os.WriteFile(filepath.Join(repo, "src", "a.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "add", ".")
+	gitIn(t, repo, "commit", "-q", "-m", "a")
+	cases := map[string]string{"a.txt:1": "No decision linked", "a.txt": "No decisions about", "nothing": "No decisions found"}
+	for q, want := range cases {
+		if code, out, _ := cli(t, "why", q); code != 0 || !strings.Contains(out, want) {
+			t.Errorf("why %s: %d %q", q, code, out)
+		}
+	}
+}
+
+func TestWhyRejectsBadInput(t *testing.T) {
+	setup(t)
+	if code, _, _ := cli(t, "why"); code != 2 {
+		t.Errorf("no args: exit %d", code)
+	}
+	if code, _, errOut := cli(t, "why", "a.txt:5-2"); code != 2 || !strings.Contains(errOut, "bad line range") {
+		t.Errorf("bad range: %d %q", code, errOut)
+	}
+	if code, _, _ := cli(t, "why", "missing.txt:1"); code != 1 {
+		t.Errorf("missing file: exit %d", code)
+	}
+}
+
+func TestSupersedes(t *testing.T) {
+	setup(t)
+	_, out, _ := cli(t, addArgs...)
+	old := strings.TrimSpace(strings.TrimPrefix(out, "decision-log: saved "))
+
+	if code, _, errOut := cli(t, "add", "--decision", "Use Valkey", "--why", "w", "--rejected", "r", "--by", "user", "--supersedes", "nope"); code != 2 || !strings.Contains(errOut, "no earlier note") {
+		t.Fatalf("unknown id: %d %q", code, errOut)
+	}
+	if n := listJSON(t); len(n) != 1 {
+		t.Fatalf("note saved despite a bad id: %d", len(n))
+	}
+
+	code, _, errOut := cli(t, "add", "--decision", "Use Valkey", "--why", "w", "--rejected", "Redis", "--by", "user", "--supersedes", old)
+	if code != 0 {
+		t.Fatalf("add failed: %s", errOut)
+	}
+	notes := listJSON(t)
+	var oldNote, newNote note.Note
+	for _, n := range notes {
+		if n.ID == old {
+			oldNote = n
+		} else {
+			newNote = n
+		}
+	}
+	if oldNote.Status != note.StatusSuperseded || oldNote.SupersededBy != newNote.ID || newNote.Status != note.StatusActive {
+		t.Fatalf("not superseded: %+v / %+v", oldNote, newNote)
+	}
+	if _, text, _ := cli(t, "list"); !strings.Contains(text, "[superseded]") || !strings.Contains(text, "Replaced:  by "+newNote.ID) {
+		t.Fatalf("list doesn't show it:\n%s", text)
+	}
+}
